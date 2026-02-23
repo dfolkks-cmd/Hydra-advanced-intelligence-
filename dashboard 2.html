@@ -1,0 +1,1985 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hydra Sentinel-X — Command Deck</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@300;400;600;700;900&family=Barlow:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+/* ── Design direction: industrial trading floor terminal.
+   Think Bloomberg terminal meets aerospace CRT.
+   Monospace data, amber/red/green status lights, scanlines,
+   deliberate density that signals serious tooling. ── */
+
+:root {
+  --bg-void:      #080c0f;
+  --bg-panel:     #0d1317;
+  --bg-elevated:  #111820;
+  --bg-input:     #0a1015;
+
+  --border:       #1e2d38;
+  --border-glow:  #2a4a60;
+
+  --amber:        #f0a000;
+  --amber-dim:    #7a5000;
+  --green:        #00e676;
+  --green-dim:    #004d26;
+  --red:          #ff1744;
+  --red-dim:      #4a0012;
+  --blue:         #00b4d8;
+  --blue-dim:     #003a50;
+  --gold:         #ffd700;
+
+  --text-primary:   #d4e8f5;
+  --text-secondary: #6a8fa8;
+  --text-muted:     #364d5e;
+  --text-data:      #00e676;
+
+  --font-mono: 'Share Tech Mono', monospace;
+  --font-head: 'Barlow Condensed', sans-serif;
+  --font-body: 'Barlow', sans-serif;
+
+  --scanline-opacity: 0.03;
+  --glow-green: 0 0 8px rgba(0, 230, 118, 0.4);
+  --glow-amber: 0 0 8px rgba(240, 160, 0, 0.4);
+  --glow-red:   0 0 8px rgba(255, 23, 68, 0.4);
+  --glow-blue:  0 0 10px rgba(0, 180, 216, 0.35);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  min-height: 100vh;
+  background: var(--bg-void);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+
+/* Scanline overlay — the signature CRT texture */
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,0,0,var(--scanline-opacity)) 2px,
+    rgba(0,0,0,var(--scanline-opacity)) 4px
+  );
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* Subtle vignette */
+body::after {
+  content: '';
+  position: fixed; inset: 0;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.5) 100%);
+  pointer-events: none;
+  z-index: 9998;
+}
+
+/* ── Header ── */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 2rem;
+  height: 56px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 100;
+}
+
+.header-brand {
+  display: flex; align-items: center; gap: 1rem;
+}
+
+.brand-sigil {
+  width: 32px; height: 32px;
+  position: relative;
+}
+
+.brand-sigil svg { width: 100%; height: 100%; }
+
+.brand-name {
+  font-family: var(--font-head);
+  font-size: 1.25rem;
+  font-weight: 900;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+}
+
+.brand-sub {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--amber);
+  letter-spacing: 0.2em;
+  margin-top: -2px;
+}
+
+.header-status {
+  display: flex; align-items: center; gap: 2rem;
+}
+
+.status-pill {
+  display: flex; align-items: center; gap: 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+
+.status-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: var(--glow-green);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.status-dot.amber { background: var(--amber); box-shadow: var(--glow-amber); }
+.status-dot.red   { background: var(--red);   box-shadow: var(--glow-red); animation: none; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
+.header-time {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--amber);
+  letter-spacing: 0.08em;
+}
+
+/* ── Ticker tape ── */
+.ticker {
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  height: 30px;
+  overflow: hidden;
+  display: flex; align-items: center;
+}
+
+.ticker-inner {
+  display: flex;
+  animation: ticker-scroll 40s linear infinite;
+  white-space: nowrap;
+  gap: 3rem;
+  padding-left: 100%;
+}
+
+.ticker-item {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+  display: flex; gap: 0.5rem;
+}
+
+.ticker-sym { color: var(--amber); font-weight: bold; }
+.ticker-up  { color: var(--green); }
+.ticker-dn  { color: var(--red); }
+
+@keyframes ticker-scroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+/* ── Main layout ── */
+.layout {
+  display: grid;
+  grid-template-columns: 280px 1fr 320px;
+  grid-template-rows: auto;
+  min-height: calc(100vh - 86px);
+  gap: 0;
+}
+
+/* ── Sidebar ── */
+.sidebar {
+  background: var(--bg-panel);
+  border-right: 1px solid var(--border);
+  padding: 1.25rem 0;
+  display: flex; flex-direction: column; gap: 0;
+}
+
+.sidebar-section {
+  padding: 0.75rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.sidebar-label {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 0.75rem;
+}
+
+/* Stat blocks */
+.stat-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+
+.stat-block {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  padding: 0.625rem 0.75rem;
+}
+
+.stat-block-label {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  margin-bottom: 0.25rem;
+}
+
+.stat-block-value {
+  font-family: var(--font-mono);
+  font-size: 1.2rem;
+  font-weight: bold;
+  line-height: 1;
+}
+
+.stat-block-value.green  { color: var(--green); text-shadow: var(--glow-green); }
+.stat-block-value.amber  { color: var(--amber); text-shadow: var(--glow-amber); }
+.stat-block-value.red    { color: var(--red);   text-shadow: var(--glow-red); }
+.stat-block-value.blue   { color: var(--blue);  text-shadow: var(--glow-blue); }
+
+/* Nav items */
+.nav-item {
+  display: flex; align-items: center; gap: 0.75rem;
+  padding: 0.625rem 1.25rem;
+  font-family: var(--font-head);
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border-left: 2px solid transparent;
+}
+
+.nav-item:hover { color: var(--text-primary); background: var(--bg-elevated); }
+.nav-item.active {
+  color: var(--amber);
+  border-left-color: var(--amber);
+  background: rgba(240,160,0,0.05);
+}
+
+.nav-badge {
+  margin-left: auto;
+  background: var(--red);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  padding: 1px 5px;
+  border-radius: 2px;
+  min-width: 20px;
+  text-align: center;
+  animation: badge-pulse 1.5s ease infinite;
+}
+
+@keyframes badge-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.6; }
+}
+
+/* ── Main content ── */
+.main {
+  background: var(--bg-void);
+  padding: 1.5rem;
+  overflow-y: auto;
+}
+
+/* Panel component */
+.panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  margin-bottom: 1rem;
+}
+
+.panel-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elevated);
+}
+
+.panel-title {
+  font-family: var(--font-head);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.panel-body { padding: 1rem; }
+
+/* ── Query builder ── */
+.query-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
+  gap: 0.75rem;
+  align-items: end;
+}
+
+.field {
+  display: flex; flex-direction: column; gap: 0.4rem;
+}
+
+.field label {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.field input,
+.field select,
+.field textarea {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  padding: 0.5rem 0.75rem;
+  outline: none;
+  transition: border-color 0.15s;
+  width: 100%;
+}
+
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 1px var(--blue-dim);
+}
+
+.field textarea { resize: vertical; min-height: 60px; }
+
+.field select option { background: var(--bg-panel); }
+
+.query-form .span-full { grid-column: 1 / -1; }
+
+/* Buttons */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+  font-family: var(--font-head);
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 0.6rem 1.25rem;
+  border: 1px solid;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.btn-primary {
+  background: var(--amber);
+  border-color: var(--amber);
+  color: #000;
+}
+.btn-primary:hover { background: #ffc107; box-shadow: var(--glow-amber); }
+.btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.btn-approve {
+  background: transparent;
+  border-color: var(--green);
+  color: var(--green);
+}
+.btn-approve:hover { background: var(--green); color: #000; box-shadow: var(--glow-green); }
+
+.btn-reject {
+  background: transparent;
+  border-color: var(--red);
+  color: var(--red);
+}
+.btn-reject:hover { background: var(--red); color: #fff; box-shadow: var(--glow-red); }
+
+/* ── Execute button — only appears post-approval ── */
+.btn-execute {
+  background: linear-gradient(135deg, #7c3aed, #4f46e5);
+  border-color: #7c3aed;
+  color: #fff;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+}
+.btn-execute:hover {
+  background: linear-gradient(135deg, #6d28d9, #4338ca);
+  box-shadow: 0 0 16px rgba(124,58,237,0.5);
+}
+.btn-execute:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* ── MEV quote panel ── */
+.mev-panel {
+  border: 1px solid var(--border);
+  background: #0a1520;
+  border-radius: 4px;
+  padding: 0.875rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.mev-panel-title {
+  font-family: var(--font-condensed);
+  font-size: 0.65rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.mev-panel-title::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+.mev-quote-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.5rem;
+}
+.mev-quote-cell {
+  background: #0d1b27;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0.5rem 0.625rem;
+}
+.mev-quote-cell-label {
+  font-family: var(--font-condensed);
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 0.25rem;
+}
+.mev-quote-cell-value {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--text-primary);
+}
+
+/* ── MEV risk badge ── */
+.mev-risk-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 2px;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.mev-risk-badge.safe   { background: rgba(0,230,118,0.12); color: var(--green); border: 1px solid rgba(0,230,118,0.3); }
+.mev-risk-badge.caution{ background: rgba(240,160,0,0.12); color: var(--amber); border: 1px solid rgba(240,160,0,0.3); }
+.mev-risk-badge.danger { background: rgba(255,23,68,0.12);  color: var(--red);   border: 1px solid rgba(255,23,68,0.3);  }
+.mev-badge-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  animation: pulse 1.4s infinite;
+}
+.mev-risk-badge.safe   .mev-badge-dot { background: var(--green); }
+.mev-risk-badge.caution .mev-badge-dot { background: var(--amber); }
+.mev-risk-badge.danger .mev-badge-dot  { background: var(--red); }
+
+/* ── Slippage input row ── */
+.slippage-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.slippage-label {
+  font-family: var(--font-condensed);
+  font-size: 0.65rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.slippage-input {
+  width: 80px;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  text-align: right;
+  background: #0d1b27;
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 0.25rem 0.5rem;
+  border-radius: 3px;
+}
+.slippage-input:focus { outline: none; border-color: var(--amber); }
+.slippage-warn {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--amber);
+  line-height: 1.4;
+}
+
+/* ── Execute confirm overlay (second modal) ── */
+.exec-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.82);
+  z-index: 1100;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(4px);
+}
+.exec-overlay.open { display: flex; }
+.exec-confirm-box {
+  background: #0d1317;
+  border: 1px solid #7c3aed;
+  border-radius: 6px;
+  box-shadow: 0 0 40px rgba(124,58,237,0.3);
+  width: min(520px, 92vw);
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.exec-confirm-header {
+  font-family: var(--font-condensed);
+  font-size: 1.1rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #c4b5fd;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.exec-confirm-header::before {
+  content: '⬡';
+  color: #7c3aed;
+  font-size: 1.3rem;
+}
+.exec-confirm-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+.exec-confirm-row:last-of-type { border-bottom: none; }
+.exec-confirm-label { color: var(--text-muted); }
+.exec-confirm-value { color: var(--text-primary); font-weight: 700; }
+.exec-warning-block {
+  background: rgba(255,23,68,0.08);
+  border: 1px solid rgba(255,23,68,0.3);
+  border-radius: 3px;
+  padding: 0.625rem 0.75rem;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--red);
+  line-height: 1.6;
+}
+.exec-btn-row {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  margin-top: 0.5rem;
+}
+.exec-spinner {
+  display: none;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--amber);
+  align-items: center;
+  gap: 0.4rem;
+}
+.exec-spinner.active { display: flex; }
+.exec-spinner::before {
+  content: '◌';
+  animation: spin 1s linear infinite;
+  display: inline-block;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.btn-ghost {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text-secondary);
+}
+.btn-ghost:hover { border-color: var(--text-secondary); color: var(--text-primary); }
+
+.btn-sm { padding: 0.35rem 0.75rem; font-size: 0.75rem; }
+
+/* ── Recommendation cards ── */
+.rec-list { display: flex; flex-direction: column; gap: 0.75rem; }
+
+.rec-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: border-color 0.15s;
+  position: relative;
+  overflow: hidden;
+}
+
+.rec-card::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+}
+
+.rec-card.pending::before  { background: var(--amber); }
+.rec-card.approved::before { background: var(--green); }
+.rec-card.rejected::before { background: var(--red); }
+.rec-card.executed::before { background: var(--blue); }
+.rec-card.expired::before  { background: var(--text-muted); }
+
+.rec-card:hover { border-color: var(--border-glow); }
+
+.rec-card-header {
+  display: flex; align-items: center; gap: 1rem;
+  padding: 0.875rem 1rem 0.875rem 1.25rem;
+}
+
+.rec-action {
+  font-family: var(--font-head);
+  font-size: 1.1rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  min-width: 100px;
+}
+
+.action-strong_buy  { color: var(--green); text-shadow: var(--glow-green); }
+.action-buy         { color: #69f0ae; }
+.action-hold        { color: var(--amber); }
+.action-sell        { color: #ff6e40; }
+.action-strong_sell { color: var(--red);   text-shadow: var(--glow-red); }
+.action-avoid       { color: var(--text-muted); }
+
+.rec-symbol {
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  font-weight: bold;
+  color: var(--text-primary);
+  background: var(--bg-panel);
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--border);
+}
+
+.rec-meta {
+  flex: 1;
+  display: flex; gap: 1.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+}
+
+.rec-meta span { display: flex; flex-direction: column; gap: 1px; }
+.rec-meta strong { color: var(--text-primary); font-size: 0.8rem; }
+
+.rec-confidence-bar {
+  width: 80px; height: 4px;
+  background: var(--border);
+  position: relative;
+}
+
+.rec-confidence-fill {
+  height: 100%;
+  background: var(--amber);
+  transition: width 0.3s;
+}
+
+.rec-age {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+.rec-expires {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.05em;
+}
+
+.rec-expires.urgent { color: var(--red); animation: pulse 1s ease infinite; }
+.rec-expires.normal { color: var(--text-muted); }
+
+/* ── Detail modal ── */
+.modal-overlay {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.8);
+  z-index: 200;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+
+.modal-overlay.open { display: flex; }
+
+.modal {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-glow);
+  box-shadow: 0 0 60px rgba(0,180,216,0.1);
+  width: 100%;
+  max-width: 900px;
+  max-height: 90vh;
+  overflow-y: auto;
+  position: relative;
+  display: flex; flex-direction: column;
+}
+
+.modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elevated);
+  position: sticky; top: 0; z-index: 10;
+}
+
+.modal-title {
+  font-family: var(--font-head);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.modal-close {
+  background: none; border: none;
+  color: var(--text-secondary);
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  line-height: 1;
+}
+
+.modal-close:hover { color: var(--text-primary); }
+
+.modal-body { padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem; }
+
+/* Data grids inside modal */
+.data-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.5rem;
+}
+
+.data-cell {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  padding: 0.625rem 0.75rem;
+}
+
+.data-cell-label {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 0.3rem;
+}
+
+.data-cell-value {
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  font-weight: bold;
+}
+
+/* Rationale block */
+.rationale-box {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--amber);
+  padding: 0.875rem 1rem;
+  font-size: 0.85rem;
+  line-height: 1.7;
+  color: var(--text-primary);
+}
+
+/* Risk indicators */
+.risk-indicator {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.25rem 0.6rem;
+  border: 1px solid;
+}
+
+.risk-low     { color: var(--green); border-color: var(--green-dim); background: rgba(0,230,118,0.05); }
+.risk-medium  { color: var(--amber); border-color: var(--amber-dim); background: rgba(240,160,0,0.05); }
+.risk-high    { color: #ff6e40; border-color: #6a2010; background: rgba(255,110,64,0.05); }
+.risk-extreme { color: var(--red);   border-color: var(--red-dim);   background: rgba(255,23,68,0.05); }
+
+/* Decision form */
+.decision-form {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  padding: 1rem;
+  display: flex; flex-direction: column; gap: 0.75rem;
+}
+
+.decision-form-title {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--amber);
+}
+
+.decision-form .btn-row {
+  display: flex; gap: 0.75rem; align-items: flex-start;
+}
+
+/* Audit trail */
+.audit-trail {
+  display: flex; flex-direction: column; gap: 0;
+}
+
+.audit-entry {
+  display: flex; gap: 1rem; align-items: flex-start;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+}
+
+.audit-time  { color: var(--text-muted); white-space: nowrap; min-width: 130px; }
+.audit-actor { color: var(--amber); min-width: 100px; }
+.audit-action {
+  color: var(--text-secondary);
+  padding: 0.1rem 0.4rem;
+  border: 1px solid var(--border);
+  text-transform: uppercase;
+  font-size: 0.65rem;
+  min-width: 80px;
+  text-align: center;
+}
+
+.audit-action.submitted { color: var(--blue); border-color: var(--blue-dim); }
+.audit-action.approved  { color: var(--green); border-color: var(--green-dim); }
+.audit-action.rejected  { color: var(--red); border-color: var(--red-dim); }
+.audit-action.executed  { color: var(--blue); border-color: var(--blue-dim); }
+.audit-action.expired   { color: var(--text-muted); }
+
+.audit-details { color: var(--text-secondary); flex: 1; }
+
+/* ── Right panel: live feed ── */
+.feed-panel {
+  background: var(--bg-panel);
+  border-left: 1px solid var(--border);
+  display: flex; flex-direction: column;
+}
+
+.feed-header {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elevated);
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.feed-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.75rem;
+  display: flex; flex-direction: column; gap: 0.4rem;
+}
+
+.feed-entry {
+  display: flex; gap: 0.6rem; align-items: flex-start;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  line-height: 1.5;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid transparent;
+  transition: border-color 0.1s;
+}
+
+.feed-entry:hover { border-color: var(--border); }
+.feed-time { color: var(--text-muted); white-space: nowrap; }
+.feed-msg  { color: var(--text-secondary); flex: 1; }
+.feed-msg.info    { color: var(--text-secondary); }
+.feed-msg.success { color: var(--green); }
+.feed-msg.warn    { color: var(--amber); }
+.feed-msg.error   { color: var(--red); }
+
+/* Streaming analysis console */
+.console {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  line-height: 1.8;
+  padding: 0.75rem;
+  height: 180px;
+  overflow-y: auto;
+  color: var(--text-data);
+}
+
+.console-line { display: block; }
+.console-line.dim { color: var(--text-muted); }
+.console-line.warn { color: var(--amber); }
+.console-line.error { color: var(--red); }
+.console-cursor { display: inline-block; width: 8px; height: 14px; background: var(--green); vertical-align: middle; animation: blink 1s step-end infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+
+/* Loading state */
+.loading-shimmer {
+  background: linear-gradient(90deg, var(--bg-elevated) 25%, var(--border) 50%, var(--bg-elevated) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  height: 80px;
+  border: 1px solid var(--border);
+}
+
+@keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+/* Empty state */
+.empty-state {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 3rem;
+  gap: 1rem;
+  color: var(--text-muted);
+  border: 1px dashed var(--border);
+}
+
+.empty-state-icon { font-size: 2rem; opacity: 0.3; }
+.empty-state-text { font-family: var(--font-mono); font-size: 0.75rem; letter-spacing: 0.1em; text-align: center; }
+
+/* Toast notifications */
+.toast-container {
+  position: fixed;
+  bottom: 1.5rem; right: 1.5rem;
+  z-index: 300;
+  display: flex; flex-direction: column; gap: 0.5rem;
+  pointer-events: none;
+}
+
+.toast {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  padding: 0.75rem 1rem;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  max-width: 320px;
+  pointer-events: all;
+  animation: toast-in 0.2s ease;
+  position: relative;
+}
+
+.toast.success { border-left: 3px solid var(--green); }
+.toast.error   { border-left: 3px solid var(--red); }
+.toast.warn    { border-left: 3px solid var(--amber); }
+
+@keyframes toast-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: var(--bg-void); }
+::-webkit-scrollbar-thumb { background: var(--border); }
+::-webkit-scrollbar-thumb:hover { background: var(--border-glow); }
+
+/* Key risks list */
+.risk-list { display: flex; flex-direction: column; gap: 0.35rem; }
+.risk-list-item {
+  display: flex; align-items: flex-start; gap: 0.5rem;
+  font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-secondary);
+}
+.risk-list-item::before { content: '▸'; color: var(--red); flex-shrink: 0; }
+
+/* Tabs */
+.tabs { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 1rem; }
+.tab {
+  font-family: var(--font-head); font-size: 0.78rem; font-weight: 700;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  padding: 0.6rem 1rem; cursor: pointer;
+  color: var(--text-muted); border-bottom: 2px solid transparent;
+  transition: all 0.15s;
+}
+.tab:hover { color: var(--text-secondary); }
+.tab.active { color: var(--amber); border-bottom-color: var(--amber); }
+</style>
+</head>
+<body>
+
+<!-- ── Header ── -->
+<header class="header">
+  <div class="header-brand">
+    <div class="brand-sigil">
+      <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <polygon points="16,2 30,10 30,22 16,30 2,22 2,10" stroke="#f0a000" stroke-width="1.5" fill="rgba(240,160,0,0.05)"/>
+        <line x1="16" y1="2" x2="16" y2="30" stroke="#f0a000" stroke-width="0.75" opacity="0.4"/>
+        <line x1="2" y1="10" x2="30" y2="22" stroke="#f0a000" stroke-width="0.75" opacity="0.4"/>
+        <line x1="30" y1="10" x2="2" y2="22" stroke="#f0a000" stroke-width="0.75" opacity="0.4"/>
+        <circle cx="16" cy="16" r="4" stroke="#f0a000" stroke-width="1.5" fill="rgba(240,160,0,0.1)"/>
+        <circle cx="16" cy="16" r="1.5" fill="#f0a000"/>
+      </svg>
+    </div>
+    <div>
+      <div class="brand-name">Hydra Sentinel-X</div>
+      <div class="brand-sub">Command Deck v1.0 · HITL Protocol</div>
+    </div>
+  </div>
+  <div class="header-status">
+    <div class="status-pill"><span class="status-dot" id="graph-dot"></span><span id="graph-status">Connecting...</span></div>
+    <div class="status-pill"><span class="status-dot amber"></span><span id="pending-count-header">0 Pending</span></div>
+    <div class="header-time" id="clock"></div>
+  </div>
+</header>
+
+<!-- ── Ticker ── -->
+<div class="ticker">
+  <div class="ticker-inner" id="ticker">
+    <span class="ticker-item"><span class="ticker-sym">BTC</span><span class="ticker-up">Loading...</span></span>
+    <span class="ticker-item"><span class="ticker-sym">ETH</span><span class="ticker-up">Loading...</span></span>
+    <span class="ticker-item"><span class="ticker-sym">SOL</span><span class="ticker-up">Loading...</span></span>
+    <span class="ticker-item"><span class="ticker-sym">BNB</span><span class="ticker-up">Loading...</span></span>
+    <span class="ticker-item"><span class="ticker-sym">AVAX</span><span class="ticker-up">Loading...</span></span>
+    <span class="ticker-item"><span class="ticker-sym">BTC</span><span class="ticker-up">—</span></span>
+    <span class="ticker-item"><span class="ticker-sym">ETH</span><span class="ticker-up">—</span></span>
+    <span class="ticker-item"><span class="ticker-sym">SOL</span><span class="ticker-up">—</span></span>
+    <span class="ticker-item"><span class="ticker-sym">BNB</span><span class="ticker-up">—</span></span>
+    <span class="ticker-item"><span class="ticker-sym">AVAX</span><span class="ticker-up">—</span></span>
+  </div>
+</div>
+
+<!-- ── Main layout ── -->
+<div class="layout">
+
+  <!-- ── Sidebar ── -->
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-label">System Stats</div>
+      <div class="stat-grid">
+        <div class="stat-block">
+          <div class="stat-block-label">Pending</div>
+          <div class="stat-block-value amber" id="stat-pending">0</div>
+        </div>
+        <div class="stat-block">
+          <div class="stat-block-label">Approved</div>
+          <div class="stat-block-value green" id="stat-approved">0</div>
+        </div>
+        <div class="stat-block">
+          <div class="stat-block-label">Rejected</div>
+          <div class="stat-block-value red" id="stat-rejected">0</div>
+        </div>
+        <div class="stat-block">
+          <div class="stat-block-label">Win Rate</div>
+          <div class="stat-block-value blue" id="stat-winrate">—</div>
+        </div>
+      </div>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-label">Approval Rate</div>
+      <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem;">
+        <div style="flex:1; height:6px; background:var(--border); position:relative;">
+          <div id="approval-bar" style="height:100%; background:var(--amber); width:0%; transition:width 0.5s;"></div>
+        </div>
+        <span id="approval-rate-pct" style="font-family:var(--font-mono);font-size:0.75rem;color:var(--amber);">0%</span>
+      </div>
+    </div>
+    <div class="sidebar-section" style="border-bottom:none; flex:1;">
+      <div class="sidebar-label">Views</div>
+      <div class="nav-item active" onclick="showView('pending')" id="nav-pending">
+        ⬡ Pending Queue
+        <span class="nav-badge" id="nav-badge">0</span>
+      </div>
+      <div class="nav-item" onclick="showView('analyze')" id="nav-analyze">
+        ⬡ Run Analysis
+      </div>
+      <div class="nav-item" onclick="showView('history')" id="nav-history">
+        ⬡ Decision History
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── Main Content ── -->
+  <main class="main">
+
+    <!-- PENDING VIEW -->
+    <div id="view-pending">
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">⬡ Pending Approval Queue</span>
+          <button class="btn btn-ghost btn-sm" onclick="loadPending()">↻ Refresh</button>
+        </div>
+        <div class="panel-body">
+          <div id="pending-list" class="rec-list">
+            <div class="empty-state">
+              <div class="empty-state-icon">◎</div>
+              <div class="empty-state-text">No pending recommendations.<br>Run an analysis to generate one.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ANALYZE VIEW -->
+    <div id="view-analyze" style="display:none;">
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">⬡ New Analysis Request</span>
+        </div>
+        <div class="panel-body">
+          <div class="query-form">
+            <div class="field">
+              <label>Symbol</label>
+              <select id="q-symbol">
+                <option>BTC</option><option>ETH</option><option>SOL</option>
+                <option>BNB</option><option>AVAX</option><option>XRP</option>
+                <option>ADA</option><option>DOGE</option><option>LINK</option>
+                <option>MATIC</option><option>DOT</option><option>NEAR</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Portfolio USD</label>
+              <input type="number" id="q-portfolio" value="10000" min="100" step="1000">
+            </div>
+            <div class="field">
+              <label>Risk Tolerance</label>
+              <select id="q-risk">
+                <option value="conservative">Conservative</option>
+                <option value="moderate" selected>Moderate</option>
+                <option value="aggressive">Aggressive</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Session ID (optional)</label>
+              <input type="text" id="q-session" placeholder="leave blank for new">
+            </div>
+            <div class="field span-full">
+              <label>Query</label>
+              <textarea id="q-query" placeholder="e.g. Should I open a long position on ETH given current market conditions?">Perform a full analysis and generate a trade recommendation.</textarea>
+            </div>
+            <div class="field" style="align-self:end;">
+              <button class="btn btn-primary" id="run-btn" onclick="runAnalysis()">▶ Run Analysis</button>
+            </div>
+          </div>
+          <div id="console-wrap" style="margin-top:1rem; display:none;">
+            <div class="panel-title" style="margin-bottom:0.5rem; font-family:var(--font-mono); font-size:0.65rem; letter-spacing:0.15em; color:var(--text-muted); text-transform:uppercase;">Agent Output</div>
+            <div class="console" id="console"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- HISTORY VIEW -->
+    <div id="view-history" style="display:none;">
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">⬡ Decision History</span>
+          <div style="display:flex; gap:0.5rem;">
+            <select id="history-filter-status" onchange="loadHistory()" style="background:var(--bg-input);border:1px solid var(--border);color:var(--text-secondary);font-family:var(--font-mono);font-size:0.72rem;padding:0.3rem 0.5rem;">
+              <option value="">All Status</option>
+              <option value="approved">Approved</option>
+              <option value="rejected">Rejected</option>
+              <option value="executed">Executed</option>
+              <option value="expired">Expired</option>
+            </select>
+            <button class="btn btn-ghost btn-sm" onclick="loadHistory()">↻ Refresh</button>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div id="history-list" class="rec-list"></div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ── Right Feed Panel ── -->
+  <aside class="feed-panel">
+    <div class="feed-header">Activity Log</div>
+    <div class="feed-body" id="feed"></div>
+  </aside>
+
+</div>
+
+<!-- ── Detail Modal ── -->
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="modal-title">Recommendation Detail</span>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<!-- ── Execute confirmation overlay ── -->
+<div class="exec-overlay" id="exec-overlay">
+  <div class="exec-confirm-box">
+    <div class="exec-confirm-header">Confirm On-Chain Execution</div>
+    <div id="exec-rows"><!-- populated by buildExecConfirm() --></div>
+    <div class="exec-warning-block">
+      ⚠ This action is irreversible. Once submitted, the transaction cannot be cancelled.
+      Slippage bounds will be enforced by the CDP SDK — if market price moves beyond your
+      limit before the block confirms, the transaction will revert automatically.
+    </div>
+    <div class="exec-btn-row">
+      <div class="exec-spinner" id="exec-spinner">Submitting transaction…</div>
+      <button class="btn btn-ghost" onclick="closeExecOverlay()">Cancel</button>
+      <button class="btn btn-execute" id="exec-confirm-btn" onclick="submitExecution()">
+        ⬡ Confirm &amp; Execute
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Toast container ── -->
+<div class="toast-container" id="toasts"></div>
+
+<script>
+// ── Configuration ──────────────────────────────────────────────────────────
+const API = window.location.origin;   // same host as the FastAPI server
+
+// ── State ─────────────────────────────────────────────────────────────────
+let currentView    = 'pending';
+let pollInterval   = null;
+let feedLines      = 0;
+
+// ── Clock ──────────────────────────────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    now.toUTCString().replace('GMT', 'UTC').slice(5, 25);
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ── Activity feed ──────────────────────────────────────────────────────────
+function addFeed(msg, type = 'info') {
+  const feed = document.getElementById('feed');
+  const now  = new Date().toTimeString().slice(0,8);
+  const el   = document.createElement('div');
+  el.className = 'feed-entry';
+  el.innerHTML = `<span class="feed-time">${now}</span><span class="feed-msg ${type}">${msg}</span>`;
+  feed.prepend(el);
+  if (feed.children.length > 80) feed.lastChild.remove();
+}
+
+// ── Toast notifications ────────────────────────────────────────────────────
+function showToast(msg, type = 'success') {
+  const container = document.getElementById('toasts');
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  container.appendChild(el);
+  setTimeout(() => el.remove(), 4000);
+}
+
+// ── View routing ───────────────────────────────────────────────────────────
+function showView(view) {
+  currentView = view;
+  ['pending', 'analyze', 'history'].forEach(v => {
+    document.getElementById(`view-${v}`).style.display = v === view ? '' : 'none';
+    document.getElementById(`nav-${v}`).classList.toggle('active', v === view);
+  });
+  if (view === 'pending')  loadPending();
+  if (view === 'history')  loadHistory();
+}
+
+// ── Health check ───────────────────────────────────────────────────────────
+async function checkHealth() {
+  try {
+    const res  = await fetch(`${API}/`);
+    const data = await res.json();
+    const dot  = document.getElementById('graph-dot');
+    const lbl  = document.getElementById('graph-status');
+    if (data.graph === 'ready') {
+      dot.classList.remove('red', 'amber');
+      lbl.textContent = 'System Online';
+    } else {
+      dot.className = 'status-dot amber';
+      lbl.textContent = 'Graph Loading';
+    }
+  } catch {
+    document.getElementById('graph-dot').className = 'status-dot red';
+    document.getElementById('graph-status').textContent = 'Offline';
+  }
+}
+
+// ── Stats ──────────────────────────────────────────────────────────────────
+async function loadStats() {
+  try {
+    const res  = await fetch(`${API}/api/v1/approvals/stats/summary`);
+    const data = await res.json();
+    const byStatus = data.by_status || {};
+    const pending  = data.pending || 0;
+
+    document.getElementById('stat-pending').textContent  = pending;
+    document.getElementById('stat-approved').textContent = (byStatus.approved || 0) + (byStatus.executed || 0);
+    document.getElementById('stat-rejected').textContent = byStatus.rejected || 0;
+    document.getElementById('stat-winrate').textContent  = data.win_rate_of_executed + '%';
+
+    const rate = data.approval_rate_pct || 0;
+    document.getElementById('approval-bar').style.width = rate + '%';
+    document.getElementById('approval-rate-pct').textContent = rate + '%';
+
+    document.getElementById('stat-pending').textContent       = pending;
+    document.getElementById('pending-count-header').textContent = `${pending} Pending`;
+    document.getElementById('nav-badge').textContent          = pending;
+  } catch(e) { /* server may be starting */ }
+}
+
+// ── Build recommendation card HTML ────────────────────────────────────────
+function buildRecCard(rec) {
+  const ageMs     = Date.now() - new Date(rec.submitted_at).getTime();
+  const ageMins   = Math.floor(ageMs / 60000);
+  const ageStr    = ageMins < 60 ? `${ageMins}m ago` : `${Math.floor(ageMins/60)}h ago`;
+
+  let expiresHtml = '';
+  if (rec.status === 'pending' && rec.expires_at) {
+    const minsLeft = Math.floor((new Date(rec.expires_at) - Date.now()) / 60000);
+    const urgent   = minsLeft < 60;
+    expiresHtml = `<span class="rec-expires ${urgent ? 'urgent' : 'normal'}">⏱ ${minsLeft}m left</span>`;
+  }
+
+  const confidence = Math.round((rec.confidence || 0) * 100);
+  const actionClass = `action-${(rec.action||'hold').toLowerCase().replace(/\s+/g,'_')}`;
+  const riskClass   = `risk-${rec.risk_level || 'medium'}`;
+
+  const statusColors = { pending: 'amber', approved: 'green', rejected: 'red', executed: 'blue', expired: '' };
+  const sc = statusColors[rec.status] || '';
+
+  return `
+    <div class="rec-card ${rec.status}" onclick="openModal('${rec.id}')">
+      <div class="rec-card-header">
+        <div class="rec-action ${actionClass}">${(rec.action||'HOLD').toUpperCase()}</div>
+        <div class="rec-symbol">${rec.symbol}</div>
+        <div class="rec-meta">
+          <span><span style="color:var(--text-muted);font-size:0.62rem;">Entry Low</span><strong>$${fmt(rec.entry_price_low)}</strong></span>
+          <span><span style="color:var(--text-muted);font-size:0.62rem;">Target</span><strong>$${fmt(rec.target_price)}</strong></span>
+          <span><span style="color:var(--text-muted);font-size:0.62rem;">Stop</span><strong>$${fmt(rec.stop_loss)}</strong></span>
+          <span><span style="color:var(--text-muted);font-size:0.62rem;">R/R</span><strong>${(rec.risk_reward_ratio||0).toFixed(1)}×</strong></span>
+          <span>
+            <span style="color:var(--text-muted);font-size:0.62rem;">Confidence</span>
+            <div class="rec-confidence-bar"><div class="rec-confidence-fill" style="width:${confidence}%"></div></div>
+          </span>
+          <span><div class="risk-indicator ${riskClass}">${rec.risk_level||'—'}</div></span>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.3rem;margin-left:1rem;">
+          <span class="rec-age">${ageStr}</span>
+          ${expiresHtml}
+          <span style="font-family:var(--font-mono);font-size:0.65rem;color:var(--${sc||'text-muted'});">${rec.status.toUpperCase()}</span>
+        </div>
+      </div>
+    </div>`;
+}
+
+function fmt(n) {
+  if (n == null || n === undefined) return '—';
+  return Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// ── Load pending queue ─────────────────────────────────────────────────────
+async function loadPending() {
+  try {
+    const res  = await fetch(`${API}/api/v1/approvals/pending`);
+    const data = await res.json();
+    const list = document.getElementById('pending-list');
+
+    if (!data.pending || data.pending.length === 0) {
+      list.innerHTML = `<div class="empty-state">
+        <div class="empty-state-icon">◎</div>
+        <div class="empty-state-text">No pending recommendations.<br>Run an analysis to generate one.</div>
+      </div>`;
+      return;
+    }
+
+    list.innerHTML = data.pending.map(buildRecCard).join('');
+    loadStats();
+  } catch(e) {
+    addFeed('Failed to load pending queue: ' + e.message, 'error');
+  }
+}
+
+// ── Load history ───────────────────────────────────────────────────────────
+async function loadHistory() {
+  const status = document.getElementById('history-filter-status')?.value || '';
+  const url    = `${API}/api/v1/approvals/history/all?limit=100${status ? '&status='+status : ''}`;
+  try {
+    const res  = await fetch(url);
+    const data = await res.json();
+    const list = document.getElementById('history-list');
+    if (!data.history || data.history.length === 0) {
+      list.innerHTML = `<div class="empty-state"><div class="empty-state-icon">◎</div><div class="empty-state-text">No history yet.</div></div>`;
+      return;
+    }
+    list.innerHTML = data.history.map(buildRecCard).join('');
+  } catch(e) {
+    addFeed('Failed to load history: ' + e.message, 'error');
+  }
+}
+
+// ── Run analysis ───────────────────────────────────────────────────────────
+async function runAnalysis() {
+  const btn     = document.getElementById('run-btn');
+  const cons    = document.getElementById('console');
+  const consWrap= document.getElementById('console-wrap');
+
+  btn.disabled   = true;
+  btn.textContent = '⏳ Running...';
+  consWrap.style.display = '';
+  cons.innerHTML  = '<span class="console-line">⬡ HYDRA SENTINEL-X — INITIATING ANALYSIS</span>\n';
+
+  const payload = {
+    query:           document.getElementById('q-query').value,
+    symbol:          document.getElementById('q-symbol').value,
+    portfolio_value: parseFloat(document.getElementById('q-portfolio').value),
+    risk_tolerance:  document.getElementById('q-risk').value,
+    session_id:      document.getElementById('q-session').value || undefined,
+  };
+
+  addFeed(`Analysis started: ${payload.symbol}`, 'info');
+
+  const stepLabels = {
+    routing_complete:              '🧭 Routing query to specialists...',
+    market_analysis_complete:      '📊 Market Analyst → complete',
+    technical_analysis_complete:   '📈 Technical Analyst → complete',
+    risk_assessment_complete:      '⚖️  Risk Manager → complete',
+    strategy_complete:             '🎯 Strategy Advisor → complete',
+    synthesis_complete:            '✅ Synthesising final report...',
+  };
+
+  try {
+    // Use the streaming endpoint to show live progress
+    const res = await fetch(`${API}/api/v1/analyze/stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    const reader  = res.body.getReader();
+    const decoder = new TextDecoder();
+    let   result  = null;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = decoder.decode(value);
+      const lines = chunk.split('\n').filter(l => l.startsWith('data: '));
+
+      for (const line of lines) {
+        const json_str = line.slice(6).trim();
+        if (!json_str) continue;
+        try {
+          const event = JSON.parse(json_str);
+
+          if (event.type === 'progress') {
+            const label = stepLabels[event.step] || event.message || event.step;
+            cons.innerHTML += `<span class="console-line">${label}</span>\n`;
+            cons.scrollTop  = cons.scrollHeight;
+            addFeed(label, 'info');
+          }
+
+          if (event.type === 'complete') {
+            result = event.result;
+            cons.innerHTML += `<span class="console-line" style="color:var(--green);">✓ Analysis complete — submitting for approval</span>\n<span class="console-cursor"></span>`;
+          }
+
+          if (event.type === 'error') {
+            cons.innerHTML += `<span class="console-line error">✗ ${event.message}</span>\n`;
+            addFeed('Analysis error: ' + event.message, 'error');
+          }
+        } catch { /* partial chunk */ }
+      }
+    }
+
+    // Submit the result to the approval queue
+    if (result) {
+      const subRes = await fetch(`${API}/api/v1/approvals/submit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id:    result.session_id,
+          symbol:        result.symbol,
+          agent_outputs: result,
+        }),
+      });
+      const subData = await subRes.json();
+      cons.innerHTML += `<span class="console-line" style="color:var(--amber);">⬡ Recommendation ID: ${subData.recommendation_id}</span>\n`;
+      addFeed(`Recommendation submitted: ${subData.recommendation_id}`, 'success');
+      showToast(`✅ ${payload.symbol} recommendation queued for review`, 'success');
+      loadStats();
+      // Switch to pending queue automatically
+      setTimeout(() => showView('pending'), 1200);
+    }
+
+  } catch(e) {
+    cons.innerHTML += `<span class="console-line error">✗ ${e.message}</span>\n`;
+    addFeed('Analysis failed: ' + e.message, 'error');
+    showToast('Analysis failed: ' + e.message, 'error');
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = '▶ Run Analysis';
+  }
+}
+
+// ── Detail modal ───────────────────────────────────────────────────────────
+async function openModal(id) {
+  try {
+    const res  = await fetch(`${API}/api/v1/approvals/${id}`);
+    const rec  = await res.json();
+
+    document.getElementById('modal-title').textContent =
+      `${rec.symbol} · ${(rec.action||'').toUpperCase()} · ${rec.status.toUpperCase()}`;
+
+    const risks    = Array.isArray(rec.key_risks) ? rec.key_risks : [];
+    const riskHtml = risks.length
+      ? `<div class="risk-list">${risks.map(r => `<div class="risk-list-item">${r}</div>`).join('')}</div>`
+      : '<span style="color:var(--text-muted);font-family:var(--font-mono);font-size:0.72rem;">None specified</span>';
+
+    const auditHtml = (rec.audit_log || []).map(a => {
+      const details = typeof a.details === 'string' ? a.details :
+                      (a.details?.reason || '');
+      return `<div class="audit-entry">
+        <span class="audit-time">${new Date(a.timestamp).toLocaleString()}</span>
+        <span class="audit-actor">${a.actor||'—'}</span>
+        <span class="audit-action ${a.action}">${a.action}</span>
+        <span class="audit-details">${details}</span>
+      </div>`;
+    }).join('');
+
+    // Track active rec for MEV overlay
+    _activeRecId    = rec.id;
+    _activeMevQuote = null;
+    _activeSlipBps  = 50;
+
+    const isPending  = rec.status === 'pending';
+    const isApproved = rec.status === 'approved';
+
+    const decisionForm = isPending ? `
+      <div class="decision-form">
+        <div class="decision-form-title">⬡ Your Decision</div>
+        <div class="field">
+          <label>Reviewer ID</label>
+          <input type="text" id="dec-reviewer" value="operator" placeholder="Your name/ID">
+        </div>
+        <div class="field">
+          <label>Reasoning (required — explain your decision)</label>
+          <textarea id="dec-reason" placeholder="e.g. RSI confirms oversold bounce, volume supports the setup, agree with entry zone..." rows="3"></textarea>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-approve" onclick="decide('${rec.id}', 'approve')">✓ Approve</button>
+          <button class="btn btn-reject"  onclick="decide('${rec.id}', 'reject')">✗ Reject</button>
+          <div style="flex:1"></div>
+          <div style="font-family:var(--font-mono);font-size:0.65rem;color:var(--text-muted);align-self:center;">
+            Expires: ${new Date(rec.expires_at).toLocaleString()}
+          </div>
+        </div>
+      </div>` : isApproved ? `
+      <div class="decision-form">
+        <div class="decision-form-title" style="color:var(--green);">✓ Approved — Ready to Execute</div>
+        <div style="font-family:var(--font-mono);font-size:0.72rem;color:var(--text-secondary);margin-bottom:0.5rem;">
+          Approved by <strong>${rec.reviewer || 'operator'}</strong>:
+          <em style="color:var(--text-muted);">${rec.human_reason || ''}</em>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-execute" onclick="openExecOverlay('${rec.id}', ${JSON.stringify(rec).replace(/"/g,'&quot;')})">
+            ⬡ Execute On-Chain
+          </button>
+          <div style="flex:1"></div>
+          <div style="font-family:var(--font-mono);font-size:0.65rem;color:var(--text-muted);align-self:center;">
+            Review quote &amp; slippage below before executing
+          </div>
+        </div>
+      </div>` : `
+      <div style="font-family:var(--font-mono);font-size:0.75rem;color:var(--text-muted);padding:0.75rem;border:1px solid var(--border);">
+        Decision recorded: <strong style="color:var(--text-primary);">${rec.status.toUpperCase()}</strong>
+        ${rec.human_reason ? `<br>Reason: <em style="color:var(--text-secondary);">${rec.human_reason}</em>` : ''}
+      </div>`;
+
+    document.getElementById('modal-body').innerHTML = `
+      <div class="data-grid">
+        <div class="data-cell"><div class="data-cell-label">Action</div><div class="data-cell-value action-${(rec.action||'hold').toLowerCase()} ">${(rec.action||'—').toUpperCase()}</div></div>
+        <div class="data-cell"><div class="data-cell-label">Symbol</div><div class="data-cell-value">${rec.symbol}</div></div>
+        <div class="data-cell"><div class="data-cell-label">Strategy</div><div class="data-cell-value" style="font-size:0.75rem;">${rec.strategy_used||'—'}</div></div>
+        <div class="data-cell"><div class="data-cell-label">Timeframe</div><div class="data-cell-value">${rec.timeframe||'—'}</div></div>
+        <div class="data-cell"><div class="data-cell-label">Confidence</div><div class="data-cell-value">${Math.round((rec.confidence||0)*100)}%</div></div>
+        <div class="data-cell"><div class="data-cell-label">Risk Level</div><div class="data-cell-value"><span class="risk-indicator risk-${rec.risk_level||'medium'}">${rec.risk_level||'—'}</span></div></div>
+        <div class="data-cell"><div class="data-cell-label">Entry Low</div><div class="data-cell-value">$${fmt(rec.entry_price_low)}</div></div>
+        <div class="data-cell"><div class="data-cell-label">Entry High</div><div class="data-cell-value">$${fmt(rec.entry_price_high)}</div></div>
+        <div class="data-cell"><div class="data-cell-label">Target Price</div><div class="data-cell-value" style="color:var(--green);">$${fmt(rec.target_price)}</div></div>
+        <div class="data-cell"><div class="data-cell-label">Stop Loss</div><div class="data-cell-value" style="color:var(--red);">$${fmt(rec.stop_loss)}</div></div>
+        <div class="data-cell"><div class="data-cell-label">Position USD</div><div class="data-cell-value">$${fmt(rec.position_size_usd)}</div></div>
+        <div class="data-cell"><div class="data-cell-label">Risk / Reward</div><div class="data-cell-value">${(rec.risk_reward_ratio||0).toFixed(2)}×</div></div>
+      </div>
+
+      <div>
+        <div class="panel-title" style="margin-bottom:0.5rem;">Agent Rationale</div>
+        <div class="rationale-box">${rec.agent_rationale || 'No rationale provided.'}</div>
+      </div>
+
+      <div>
+        <div class="panel-title" style="margin-bottom:0.5rem;">Key Risks Identified</div>
+        ${riskHtml}
+      </div>
+
+      ${decisionForm}
+
+      <!-- MEV Quote Panel — populated async after modal opens -->
+      <div class="mev-panel" id="mev-panel-${rec.id}">
+        <div class="mev-panel-title">⬡ Live Quote &amp; MEV Analysis</div>
+        <div style="font-family:var(--font-mono);font-size:0.7rem;color:var(--text-muted);">
+          Loading quote…
+        </div>
+      </div>
+
+      <div>
+        <div class="panel-title" style="margin-bottom:0.5rem;">Audit Trail</div>
+        <div class="audit-trail">${auditHtml || '<span style="color:var(--text-muted);font-family:var(--font-mono);font-size:0.72rem;">No entries</span>'}</div>
+      </div>`;
+
+    document.getElementById('modal').classList.add('open');
+
+    // Fire the live quote fetch async — doesn't block modal display
+    fetchMevQuote(rec.id, rec.symbol, rec.action, rec.entry_price_low);
+  } catch(e) {
+    showToast('Failed to load recommendation: ' + e.message, 'error');
+  }
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.remove('open');
+}
+
+document.getElementById('modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('modal')) closeModal();
+});
+
+// ── Approve / Reject ───────────────────────────────────────────────────────
+async function decide(id, decision) {
+  const reason   = document.getElementById('dec-reason')?.value?.trim();
+  const reviewer = document.getElementById('dec-reviewer')?.value?.trim() || 'operator';
+
+  if (!reason || reason.length < 5) {
+    showToast('Please enter a reason for your decision (at least 5 characters)', 'warn');
+    document.getElementById('dec-reason').style.borderColor = 'var(--red)';
+    return;
+  }
+
+  try {
+    const res  = await fetch(`${API}/api/v1/approvals/${id}/${decision}`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ reason, reviewer }),
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      showToast(data.detail || 'Decision failed', 'error');
+      return;
+    }
+
+    const label = decision === 'approve' ? '✅ Approved' : '❌ Rejected';
+    showToast(`${label} — ${id.slice(0,8)}`, decision === 'approve' ? 'success' : 'error');
+    addFeed(`${label}: ${id.slice(0,8)} — ${reason.slice(0,60)}`, decision === 'approve' ? 'success' : 'warn');
+
+    // After approval, reload the modal so the Execute button appears
+    if (decision === 'approve') {
+      await openModal(id);
+    } else {
+      closeModal();
+    }
+    loadPending();
+    loadStats();
+  } catch(e) {
+    showToast('Request failed: ' + e.message, 'error');
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MEV PROTECTION — LIVE QUOTE + EXECUTE LAYER
+// ══════════════════════════════════════════════════════════════════════════════
+//
+// Three-stage flow:
+//   1. openModal() fires fetchMevQuote() in background → populates quote panel
+//   2. Human writes reason + clicks Approve → decide() records approval
+//      Modal reloads → Execute button now visible
+//   3. Human clicks Execute → buildExecConfirm() shows confirm overlay
+//      Human reviews exact slippage BPS + estimated output → clicks Confirm
+//      submitExecution() calls /api/v1/approvals/{id}/execute
+//      Server validates approval record, calls CDP SDK, records tx hash
+
+let _activeRecId    = null;   // rec ID currently in the modal
+let _activeMevQuote = null;   // last fetched quote for the active rec
+let _activeSlipBps  = 50;     // slippage in BPS, editable by human
+
+// ── MEV risk classification ───────────────────────────────────────────────
+function classifyMevRisk(volLiqRatio) {
+  if (volLiqRatio === null || volLiqRatio === undefined) return 'unknown';
+  if (volLiqRatio < 2)  return 'safe';
+  if (volLiqRatio < 5)  return 'caution';
+  return 'danger';
+}
+
+function mevRiskBadgeHtml(risk, volLiqRatio) {
+  const labels = { safe: '✓ LOW MEV RISK', caution: '⚠ ELEVATED MEV', danger: '✗ SANDWICH RISK', unknown: '? MEV UNKNOWN' };
+  const label  = labels[risk] || labels.unknown;
+  const cls    = risk === 'unknown' ? 'caution' : risk;
+  return `
+    <span class="mev-risk-badge ${cls}">
+      <span class="mev-badge-dot"></span>
+      ${label}
+      ${volLiqRatio != null ? `<span style="opacity:0.7;font-weight:400;">&nbsp;vol/liq ${volLiqRatio.toFixed(1)}×</span>` : ''}
+    </span>`;
+}
+
+// ── Default slippage by risk level ───────────────────────────────────────
+function defaultSlippageBps(risk) {
+  return { safe: 50, caution: 100, danger: 200, unknown: 100 }[risk] || 100;
+}
+
+// ── Fetch live CDP quote (read-only) ─────────────────────────────────────
+async function fetchMevQuote(recId, symbol, action, entryPrice) {
+  const panel = document.getElementById(`mev-panel-${recId}`);
+  if (!panel) return;
+
+  panel.innerHTML = `
+    <div class="mev-panel-title">⬡ Live Quote &amp; MEV Analysis</div>
+    <div style="font-family:var(--font-mono);font-size:0.7rem;color:var(--amber);">
+      ◌ Fetching real-time quote from CDP…
+    </div>`;
+
+  try {
+    const res  = await fetch(`${API}/api/v1/approvals/${recId}/quote`);
+    const data = await res.json();
+
+    if (!res.ok) {
+      panel.innerHTML = `
+        <div class="mev-panel-title">⬡ Live Quote</div>
+        <div style="font-family:var(--font-mono);font-size:0.68rem;color:var(--text-muted);">
+          Quote unavailable: ${data.detail || 'CDP not configured'}<br>
+          <span style="color:var(--text-muted);opacity:0.6;">
+            Set CDP credentials to enable live quotes and execution.
+          </span>
+        </div>`;
+      return;
+    }
+
+    _activeMevQuote = data;
+    const risk = classifyMevRisk(data.vol_liq_ratio);
+    _activeSlipBps = defaultSlippageBps(risk);
+
+    // Slippage warning text
+    const slipWarning = {
+      safe:    '',
+      caution: '⚠ Elevated vol/liq ratio detected. Slippage auto-set to 1%. Adjust if needed.',
+      danger:  '⚠ HIGH SANDWICH RISK. Pool is shallow. Slippage auto-set to 2% (200 bps). Consider waiting for better liquidity.',
+      unknown: 'Pool liquidity data unavailable. Using default 1% slippage.',
+    }[risk] || '';
+
+    panel.innerHTML = `
+      <div class="mev-panel-title">
+        ⬡ Live Quote &amp; MEV Analysis
+        ${mevRiskBadgeHtml(risk, data.vol_liq_ratio)}
+      </div>
+      <div class="mev-quote-grid">
+        <div class="mev-quote-cell">
+          <div class="mev-quote-cell-label">Pool Price</div>
+          <div class="mev-quote-cell-value">$${fmtFull(data.pool_price)}</div>
+        </div>
+        <div class="mev-quote-cell">
+          <div class="mev-quote-cell-label">Price Impact</div>
+          <div class="mev-quote-cell-value" style="color:${data.price_impact_pct > 2 ? 'var(--red)' : 'var(--text-primary)'};">
+            ${data.price_impact_pct != null ? data.price_impact_pct.toFixed(2) + '%' : '—'}
+          </div>
+        </div>
+        <div class="mev-quote-cell">
+          <div class="mev-quote-cell-label">Pool Liquidity</div>
+          <div class="mev-quote-cell-value">$${fmtK(data.liquidity_usd)}</div>
+        </div>
+        <div class="mev-quote-cell">
+          <div class="mev-quote-cell-label">Vol / Liq</div>
+          <div class="mev-quote-cell-value" style="color:${risk==='danger'?'var(--red)':risk==='caution'?'var(--amber)':'var(--green)'};">
+            ${data.vol_liq_ratio != null ? data.vol_liq_ratio.toFixed(1) + '×' : '—'}
+          </div>
+        </div>
+      </div>
+      <div class="slippage-row">
+        <span class="slippage-label">Slippage Tolerance</span>
+        <input
+          class="slippage-input"
+          type="number"
+          id="slip-bps-${recId}"
+          value="${_activeSlipBps}"
+          min="10" max="500" step="10"
+          title="Slippage in basis points (100 bps = 1%)"
+          onchange="_activeSlipBps = parseInt(this.value) || 50;"
+        />
+        <span class="slippage-label" style="margin-left:-0.5rem;">bps</span>
+        <span class="slippage-label" style="color:var(--text-secondary);">
+          (${(_activeSlipBps/100).toFixed(2)}%)
+        </span>
+        ${slipWarning ? `<span class="slippage-warn">${slipWarning}</span>` : ''}
+      </div>`;
+
+  } catch(e) {
+    panel.innerHTML = `
+      <div class="mev-panel-title">⬡ Live Quote</div>
+      <div style="font-family:var(--font-mono);font-size:0.68rem;color:var(--text-muted);">
+        Network error: ${e.message}
+      </div>`;
+  }
+}
+
+// ── Number formatters ─────────────────────────────────────────────────────
+function fmtFull(n) {
+  if (n == null) return '—';
+  return Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 });
+}
+function fmtK(n) {
+  if (n == null) return '—';
+  if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M';
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+  return Number(n).toFixed(0);
+}
+
+// ── Execute confirm overlay ───────────────────────────────────────────────
+function openExecOverlay(recId, rec) {
+  _activeRecId = recId;
+  const slip   = _activeSlipBps;
+  const quote  = _activeMevQuote || {};
+
+  const rows = [
+    ['Symbol',           rec.symbol || '—'],
+    ['Action',           (rec.action || '—').toUpperCase()],
+    ['Entry Zone',       rec.entry_price_low && rec.entry_price_high
+                           ? `$${fmt(rec.entry_price_low)} – $${fmt(rec.entry_price_high)}`
+                           : '—'],
+    ['Pool Price',       quote.pool_price ? `$${fmtFull(quote.pool_price)}` : 'Not fetched'],
+    ['Price Impact',     quote.price_impact_pct != null ? `${quote.price_impact_pct.toFixed(2)}%` : '—'],
+    ['Slippage Limit',   `${slip} bps (${(slip/100).toFixed(2)}%)`],
+    ['Est. Output',      quote.estimated_output ? `${quote.estimated_output} ${rec.symbol}` : '—'],
+    ['Position Size',    rec.position_size_usd ? `$${fmt(rec.position_size_usd)}` : '—'],
+  ].map(([label, value]) => `
+    <div class="exec-confirm-row">
+      <span class="exec-confirm-label">${label}</span>
+      <span class="exec-confirm-value">${value}</span>
+    </div>`).join('');
+
+  document.getElementById('exec-rows').innerHTML = rows;
+  document.getElementById('exec-spinner').classList.remove('active');
+  document.getElementById('exec-confirm-btn').disabled = false;
+  document.getElementById('exec-overlay').classList.add('open');
+}
+
+function closeExecOverlay() {
+  document.getElementById('exec-overlay').classList.remove('open');
+}
+
+document.getElementById('exec-overlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('exec-overlay')) closeExecOverlay();
+});
+
+// ── Submit execution ──────────────────────────────────────────────────────
+async function submitExecution() {
+  if (!_activeRecId) return;
+
+  const spinner = document.getElementById('exec-spinner');
+  const btn     = document.getElementById('exec-confirm-btn');
+
+  spinner.classList.add('active');
+  btn.disabled = true;
+
+  try {
+    const res  = await fetch(`${API}/api/v1/approvals/${_activeRecId}/execute`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ slippage_bps: _activeSlipBps }),
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      showToast(`Execution failed: ${data.detail || 'Unknown error'}`, 'error');
+      addFeed(`❌ Execution failed: ${data.detail || 'Unknown'}`, 'error');
+      spinner.classList.remove('active');
+      btn.disabled = false;
+      return;
+    }
+
+    closeExecOverlay();
+    closeModal();
+    showToast(`✅ Executed — Tx: ${(data.transaction_hash || '').slice(0,12)}…`, 'success');
+    addFeed(
+      `✅ Executed: ${_activeRecId.slice(0,8)} | Tx: ${(data.transaction_hash || '').slice(0,12)}…`,
+      'success'
+    );
+    loadPending();
+    loadStats();
+
+  } catch(e) {
+    showToast('Execution request failed: ' + e.message, 'error');
+    spinner.classList.remove('active');
+    btn.disabled = false;
+  }
+}
+    const data = await res.json();
+
+    if (!res.ok) {
+      showToast(data.detail || 'Decision failed', 'error');
+      return;
+    }
+
+    const label = decision === 'approve' ? '✅ Approved' : '❌ Rejected';
+    showToast(`${label} — ${id.slice(0,8)}`, decision === 'approve' ? 'success' : 'error');
+    addFeed(`${label}: ${id.slice(0,8)} — ${reason.slice(0,60)}`, decision === 'approve' ? 'success' : 'warn');
+    closeModal();
+    loadPending();
+    loadStats();
+  } catch(e) {
+    showToast('Request failed: ' + e.message, 'error');
+  }
+}
+
+// ── Auto-polling ───────────────────────────────────────────────────────────
+function startPolling() {
+  pollInterval = setInterval(() => {
+    checkHealth();
+    loadStats();
+    if (currentView === 'pending') loadPending();
+  }, 15000);
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+(async function init() {
+  await checkHealth();
+  await loadStats();
+  await loadPending();
+  addFeed('Command Deck initialised', 'success');
+  addFeed('Polling interval: 15s', 'info');
+  startPolling();
+})();
+</script>
+</body>
+</html>

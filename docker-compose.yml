@@ -1,0 +1,220 @@
+# ============================================================
+# Hydra Sentinel-X — Docker Compose (Production + Dev)
+# ============================================================
+#
+# WHAT THIS FILE DOES:
+# docker-compose.yml is the "environment contract" — it describes the
+# full runtime environment your application needs: which container images
+# to run, how they connect to each other, what files to mount, which ports
+# to expose, and how to inject secrets from .env.
+#
+# Think of it like a stage blueprint for a play: the Dockerfile defines
+# each actor's costume (what's inside the container), but docker-compose
+# defines the stage layout, the props, and how the actors interact.
+#
+# HOW TO USE:
+#   Development:  docker compose up --build
+#   Production:   docker compose -f docker-compose.yml up -d
+#   View logs:    docker compose logs -f hydra-api
+#   Stop:         docker compose down  (data is preserved in volumes)
+#   Full reset:   docker compose down -v  (⚠️ deletes volumes & data)
+#
+# ============================================================
+
+services:
+
+  # ── Service 1: Hydra Sentinel-X API ────────────────────────────────────────
+  # This is the main FastAPI application running inside the container
+  # we built in the Dockerfile.
+  hydra-api:
+    # Build from the Dockerfile in the current directory.
+    # `target: runtime` tells Docker to use only the final runtime stage,
+    # not the builder stage — keeping the deployed image lean.
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+
+    # Name the container explicitly so `docker exec`, `docker logs`, and
+    # monitoring tools can reference it by a stable name instead of a
+    # randomly generated one.
+    container_name: hydra-sentinel-x
+
+    # RESTART POLICY:
+    # `unless-stopped` means Docker will automatically restart this container
+    # if it crashes or if the host machine reboots — but not if you
+    # deliberately stop it with `docker compose stop`. This is the right
+    # choice for a production API: it recovers from crashes automatically
+    # but respects intentional maintenance windows.
+    restart: unless-stopped
+
+    # ENVIRONMENT VARIABLES:
+    # These are injected from your .env file (see .env.example).
+    # The container reads these at startup — changing them requires a restart.
+    #
+    # Why not bake them into the Dockerfile?
+    # Because secrets like API keys should NEVER be committed to source control
+    # or baked into a Docker image. The image should be secret-free and
+    # deployable anywhere; secrets come in from the environment at runtime.
+    environment:
+      # Core secrets — pulled from .env file
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - COINGECKO_API_KEY=${COINGECKO_API_KEY:- }  # optional, empty string if not set
+      - NEWS_API_KEY=${NEWS_API_KEY:- }
+      - TAVILY_API_KEY=${TAVILY_API_KEY:- }
+
+      # Memory paths — these must match the volume mount paths below
+      - MEMORY_DIR=/app/memory
+
+      # Agent config
+      - ORCHESTRATOR_MODEL=${ORCHESTRATOR_MODEL:-claude-opus-4-6}
+      - SPECIALIST_MODEL=${SPECIALIST_MODEL:-claude-sonnet-4-6}
+
+      # CORS — set this to your frontend domain in production
+      # e.g. ALLOWED_ORIGINS=https://yourapp.com
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-*}
+
+      # CDP (optional — only needed if Coinbase wallet integration is active)
+      - CDP_KEY_PATH=${CDP_KEY_PATH:-/app/cdp/cdp_api_key.json}
+      - WALLET_STATE_PATH=${WALLET_STATE_PATH:-/app/cdp/wallet_state.json}
+      - CDP_NETWORK_ID=${CDP_NETWORK_ID:-base-sepolia}
+      - CDP_MAX_TRANSFER_PCT=${CDP_MAX_TRANSFER_PCT:-5.0}
+
+    # PORT MAPPING: host_port:container_port
+    # The container's uvicorn listens on 8000. We expose that on the host's
+    # port 8000. When nginx is in front (see below), traffic flows:
+    #   Internet → nginx :80/:443 → hydra-api :8000
+    # If you're NOT using nginx, map directly to a public port here.
+    ports:
+      - "${API_PORT:-8000}:8000"
+
+    # VOLUMES — this is the most critical section for data persistence.
+    #
+    # HOW DOCKER VOLUMES WORK:
+    # When a container restarts, its filesystem is reset to the state
+    # described in the Dockerfile — any files written at runtime are gone.
+    # Volumes are an exception: they live outside the container lifecycle
+    # on the host filesystem, and are mounted INTO the container at a
+    # specified path. Files written to that path survive restarts,
+    # image rebuilds, and even container deletion (until you run `down -v`).
+    #
+    # Without the memory volume:
+    #   Every `docker compose up` would start with empty SQLite databases.
+    #   Your agent would have no memory of past sessions, no trade history,
+    #   and LangGraph's checkpoint continuity would be broken.
+    #
+    # With the memory volume:
+    #   langgraph.db and agent_memory.db persist indefinitely on the host
+    #   at ./memory/ — the container can be replaced entirely and picks up
+    #   exactly where it left off.
+    volumes:
+      # Named volume for SQLite databases.
+      # ./memory on the HOST maps to /app/memory INSIDE the container.
+      # This is a "bind mount" (host path) rather than a Docker-managed volume,
+      # which makes it easy to backup: just `cp -r ./memory ./memory_backup`.
+      - ./memory:/app/memory
+
+      # CDP wallet state — persists the wallet ID across restarts
+      - ./cdp:/app/cdp
+
+    # HEALTHCHECK for docker-compose.
+    # Docker will wait for this to pass before marking the service "healthy".
+    # Other services can depend on this with `depends_on: condition: service_healthy`.
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      start_period: 25s   # agent init takes ~10s; give it 25s before first check
+      retries: 3
+
+    # RESOURCE LIMITS:
+    # Prevents the container from consuming all host memory/CPU during a
+    # runaway analysis loop. Adjust based on your VPS size.
+    # A $20/month VPS (2 vCPU / 4GB RAM) comfortably handles these limits.
+    deploy:
+      resources:
+        limits:
+          cpus: "1.5"       # max 1.5 CPU cores
+          memory: "2G"      # max 2GB RAM
+        reservations:
+          cpus: "0.25"      # guaranteed minimum
+          memory: "512M"
+
+    # LOGGING:
+    # json-file driver rotates logs automatically.
+    # Without this, logs grow unboundedly and fill your disk on a VPS.
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"    # rotate after 50MB
+        max-file: "5"      # keep 5 rotated files (250MB total max)
+
+    # Connect this service to our private network
+    networks:
+      - hydra-network
+
+
+  # ── Service 2: Nginx Reverse Proxy ─────────────────────────────────────────
+  # Nginx sits in front of the FastAPI app and handles:
+  #   - TLS termination (SSL certificates via Let's Encrypt / Certbot)
+  #   - HTTP → HTTPS redirect
+  #   - Request buffering (protects gunicorn from slow clients)
+  #   - Rate limiting (optional but recommended in production)
+  #   - Static file serving (if you add a frontend)
+  #
+  # Think of nginx as the bouncer: it validates and pre-processes every
+  # request before handing it to the FastAPI application.
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: hydra-nginx
+    restart: unless-stopped
+
+    ports:
+      - "80:80"
+      - "443:443"
+
+    volumes:
+      # Nginx config — we'll create this file in the deployment guide
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      # SSL certificates (managed by certbot on the host or another container)
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      # Certbot webroot for certificate renewal challenges
+      - ./nginx/certbot-webroot:/var/www/certbot:ro
+
+    depends_on:
+      hydra-api:
+        condition: service_healthy   # only start after API passes healthcheck
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+    networks:
+      - hydra-network
+
+
+# ── Networks ────────────────────────────────────────────────────────────────
+# A private Docker network isolates our containers from other Docker
+# workloads on the same host. Containers on this network can reach each
+# other by service name (e.g. nginx proxies to http://hydra-api:8000),
+# but nothing outside the network can reach the API directly.
+networks:
+  hydra-network:
+    driver: bridge
+    name: hydra-sentinel-network
+
+
+# ── Named Volumes (alternative to bind mounts) ──────────────────────────────
+# If you prefer Docker-managed volumes over host bind mounts, uncomment
+# this section and change the volume references above from `./memory:/app/memory`
+# to `hydra-memory:/app/memory`. Docker-managed volumes are better for
+# environments where you don't control the host filesystem path (e.g. ECS),
+# but bind mounts are easier to backup and inspect directly.
+#
+# volumes:
+#   hydra-memory:
+#     driver: local
+#   hydra-cdp:
+#     driver: local

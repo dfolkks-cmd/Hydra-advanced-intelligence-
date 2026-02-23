@@ -1,0 +1,129 @@
+{
+  "$schema": "https://assets.alpic.ai/alpic.json",
+  "_comment": "Hydra Sentinel-X — Master MCP Server Configuration",
+
+  "servers": {
+
+    "market_intelligence": {
+      "transport":    "streamable_http",
+      "url":          "${MARKET_INTELLIGENCE_URL:-http://localhost:8001/mcp}",
+      "headers":      { "x-api-key": "${HYDRA_API_KEY}" },
+      "tool_group":   "market",
+      "description":  "Read-only market data: price, OHLCV, technicals, news scraping, on-chain DEX",
+      "tools": [
+        "get_price", "get_ohlcv", "get_technical",
+        "get_fear_greed", "get_on_chain", "get_trending",
+        "scrape_news", "search_news", "get_market_overview"
+      ]
+    },
+
+    "memory_server": {
+      "transport":    "streamable_http",
+      "url":          "${MEMORY_SERVER_URL:-http://localhost:8002/mcp}",
+      "headers":      { "x-api-key": "${HYDRA_API_KEY}" },
+      "tool_group":   "memory",
+      "description":  "Qdrant semantic memory: store/search analyses, rejections, GoT ThoughtNodes",
+      "tools": [
+        "store_analysis", "search_similar", "get_symbol_history",
+        "store_rejection", "get_rejections",
+        "store_thought_node", "search_patterns"
+      ]
+    },
+
+    "coingecko_official": {
+      "transport":    "streamable_http",
+      "url":          "https://mcp.api.coingecko.com/mcp",
+      "headers":      {},
+      "tool_group":   "market",
+      "description":  "Official CoinGecko MCP: 15k+ coins, DEX pools, trending, categories, nfts",
+      "notes":        "Public endpoint, no key required. Use Pro key for higher rate limits.",
+      "pro_url":      "https://pro-api.coingecko.com/mcp",
+      "pro_headers":  { "x-cg-pro-api-key": "${COINGECKO_API_KEY}" }
+    },
+
+    "prometheus": {
+      "transport":    "streamable_http",
+      "url":          "${PROMETHEUS_MCP_URL:-http://localhost:9091/mcp}",
+      "headers":      {},
+      "tool_group":   "observability",
+      "description":  "Query Prometheus metrics: agent latency, GoT survival rates, queue depth",
+      "tools": [
+        "query_metrics", "query_range", "list_metrics", "get_alerts"
+      ]
+    },
+
+    "github": {
+      "transport":    "stdio",
+      "command":      "npx",
+      "args":         ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
+      },
+      "tool_group":   "meta",
+      "description":  "GitHub: read issues, commits, code — system self-awareness and changelog"
+    },
+
+    "postgres": {
+      "transport":    "stdio",
+      "command":      "npx",
+      "args":         ["-y", "@modelcontextprotocol/server-postgres", "${DATABASE_URL}"],
+      "tool_group":   "data",
+      "description":  "Read-only SQL access to approval history (when migrated from SQLite)",
+      "notes":        "Enable once approval DB is migrated to PostgreSQL"
+    }
+  },
+
+  "agent_tool_assignments": {
+    "_comment": "Which tool groups each specialist agent has access to",
+    "market_analyst":   ["market"],
+    "technical_analyst":["market"],
+    "risk_manager":     ["market", "data"],
+    "strategy_advisor": ["market", "memory"],
+    "orchestrator":     ["memory", "observability", "meta"],
+    "got_generate":     ["market", "memory"],
+    "got_critique":     ["market"],
+    "got_aggregate":    ["memory"]
+  },
+
+  "environment_variables": {
+    "_comment": "Set these in your .env file or deployment platform",
+    "required": [
+      "ANTHROPIC_API_KEY"
+    ],
+    "recommended": [
+      "COINGECKO_API_KEY",
+      "FIRECRAWL_API_KEY",
+      "HYDRA_API_KEY",
+      "QDRANT_URL",
+      "QDRANT_API_KEY",
+      "AGENTOPS_API_KEY",
+      "GITHUB_TOKEN"
+    ],
+    "optional": [
+      "MARKET_INTELLIGENCE_URL",
+      "MEMORY_SERVER_URL",
+      "PROMETHEUS_MCP_URL",
+      "DATABASE_URL",
+      "CACHE_TTL_SECONDS"
+    ]
+  },
+
+  "deployment": {
+    "market_intelligence_server": {
+      "platform":   "alpic",
+      "repo":       "github.com/your-org/hydra-market-intelligence",
+      "branch":     "main",
+      "build_cmd":  "pip install -r requirements.txt",
+      "start_cmd":  "python mcp_servers/market_intelligence/server.py",
+      "env_vars":   ["COINGECKO_API_KEY", "FIRECRAWL_API_KEY", "HYDRA_API_KEY"]
+    },
+    "memory_server": {
+      "platform":   "alpic",
+      "repo":       "github.com/your-org/hydra-memory-server",
+      "branch":     "main",
+      "build_cmd":  "pip install -r requirements.txt",
+      "start_cmd":  "python mcp_servers/memory_server/server.py",
+      "env_vars":   ["QDRANT_URL", "QDRANT_API_KEY", "HYDRA_API_KEY"]
+    }
+  }
+}
